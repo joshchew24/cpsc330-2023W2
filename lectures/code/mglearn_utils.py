@@ -3,7 +3,8 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, colorConverter
 from sklearn.datasets import make_blobs
-
+from sklearn.preprocessing import (StandardScaler, MinMaxScaler, Normalizer,
+                                   RobustScaler)
 cm3 = ListedColormap(['#0000aa', '#ff2020', '#50ff50'])
 cm2 = ListedColormap(['#0000aa', '#ff2020'])
 
@@ -49,7 +50,40 @@ def plot_2d_separator(classifier, X, fill=False, ax=None, eps=None, alpha=1,
     ax.set_xticks(())
     ax.set_yticks(())
 
+def plot_2d_scores(classifier, X, ax=None, eps=None, alpha=1, cm="viridis",
+                   function=None):
+    # binary with fill
+    if eps is None:
+        eps = X.std() / 2.
 
+    if ax is None:
+        ax = plt.gca()
+
+    x_min, x_max = X[:, 0].min() - eps, X[:, 0].max() + eps
+    y_min, y_max = X[:, 1].min() - eps, X[:, 1].max() + eps
+    xx = np.linspace(x_min, x_max, 100)
+    yy = np.linspace(y_min, y_max, 100)
+
+    X1, X2 = np.meshgrid(xx, yy)
+    X_grid = np.c_[X1.ravel(), X2.ravel()]
+    if function is None:
+        function = getattr(classifier, "decision_function",
+                           getattr(classifier, "predict_proba"))
+    else:
+        function = getattr(classifier, function)
+    decision_values = function(X_grid)
+    if decision_values.ndim > 1 and decision_values.shape[1] > 1:
+        # predict_proba
+        decision_values = decision_values[:, 1]
+    grr = ax.imshow(decision_values.reshape(X1.shape),
+                    extent=(x_min, x_max, y_min, y_max), aspect='auto',
+                    origin='lower', alpha=alpha, cmap=cm)
+
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(y_min, y_max)
+    ax.set_xticks(())
+    ax.set_yticks(())
+    return grr
 
 
 def discrete_scatter(x1, x2, y=None, markers=None, s=10, ax=None,
@@ -314,3 +348,38 @@ def make_wave(n_samples=100):
     y_no_noise = (np.sin(4 * x) + x)
     y = (y_no_noise + rnd.normal(size=len(x))) / 2
     return x.reshape(-1, 1), y
+
+def plot_scaling():
+    X, y = make_blobs(n_samples=50, centers=2, random_state=4, cluster_std=1)
+    X += 3
+
+    plt.figure(figsize=(15, 8))
+    main_ax = plt.subplot2grid((2, 4), (0, 0), rowspan=2, colspan=2)
+
+    main_ax.scatter(X[:, 0], X[:, 1], c=y, cmap=cm2, s=60)
+    maxx = np.abs(X[:, 0]).max()
+    maxy = np.abs(X[:, 1]).max()
+
+    main_ax.set_xlim(-maxx + 1, maxx + 1)
+    main_ax.set_ylim(-maxy + 1, maxy + 1)
+    main_ax.set_title("Original Data")
+    other_axes = [plt.subplot2grid((2, 4), (i, j))
+                  for j in range(2, 4) for i in range(2)]
+
+    for ax, scaler in zip(other_axes, [StandardScaler(), RobustScaler(),
+                                       MinMaxScaler(), Normalizer(norm='l2')]):
+        X_ = scaler.fit_transform(X)
+        ax.scatter(X_[:, 0], X_[:, 1], c=y, cmap=cm2, s=60)
+        ax.set_xlim(-2, 2)
+        ax.set_ylim(-2, 2)
+        ax.set_title(type(scaler).__name__)
+
+    other_axes.append(main_ax)
+
+    for ax in other_axes:
+        ax.spines['left'].set_position('center')
+        ax.spines['right'].set_color('none')
+        ax.spines['bottom'].set_position('center')
+        ax.spines['top'].set_color('none')
+        ax.xaxis.set_ticks_position('bottom')
+        ax.yaxis.set_ticks_position('left')
